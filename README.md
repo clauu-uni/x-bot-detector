@@ -46,6 +46,7 @@ Una extensión para **Google Chrome** diseñada para auditar perfiles en tiempo 
 * **Machine Learning:** Scikit-Learn, pyGAM (Modelos Aditivos Generalizados), Pandas, NumPy.
 * **Aplicación B2B:** Streamlit, ReportLab (para generación de PDFs).
 * **Extensión B2C:** JavaScript (ES6), HTML5, CSS3, Chrome Extensions API.
+* **Desarrollo de modelos estadísticos:** RStudio
 
 ---
 
@@ -100,12 +101,15 @@ El navegador se abrirá automáticamente en `http://localhost:8501`.
 ## Dataset de Prueba
 En la carpeta `/data` puedes encontrar el archivo CSV de prueba ya formateado y listo para ser cargado en el panel de Streamlit y probar el procesamiento masivo.
 
+## Desarrollo de los modelos estadísticos
+En la carpeta `/modelación` puedes encontrar el documento de R junto a los archivos de modelos listos para usar con el fin de evitar un elevado tiempo de ejecución. Se detalla el proceso de modelación y razonamiento para cada modelo con las métricas de validación.
+
 ---
 
 ## Autores
 * **Claudia Ruiz García** - Desarrollo de la API e Interfaces. - https://www.linkedin.com/in/claudia-ruiz-garcia/
 * **Lara Ruiz Casado** - Desarrollo del modelo de ML.
-* **Danielle Saxon** - Desarrollo del modelo de ML.
+* **Danielle Saxon** - Desarrollo del modelo de ML. - https://www.linkedin.com/in/danielle-saxon-b822a13ab/
 * **Vega Montalbán Mengod** - Desarrollo de la Interfaz Web.
 * **Juan José Escriche Giménez** - Limpieza y depuración del DataSet.
 * Proyecto académico desarrollado para la **Universitat Politècnica de València (UPV)**.
