@@ -8,7 +8,7 @@
 ![Machine Learning](https://img.shields.io/badge/Machine_Learning-GAM-orange.svg)
 
 ## Descripción del Proyecto
-AutentiX es un sistema de auditoría de perfiles en la red social X (anteriormente Twitter) diseñado para clasificar cuentas como **humanas** o **automatizadas (bots)**. 
+AutentiX es un sistema de auditoría de perfiles en la red social X (anteriormente Twitter) diseñado para clasificar cuentas como **humanas** o **automatizadas (bots)**.
 
 El proyecto presenta una **arquitectura cliente-servidor basada en el desacoplamiento**, garantizando que el procesamiento analítico y matemático opere de forma centralizada y segura. Este diseño asegura una alta escalabilidad y facilita el mantenimiento técnico de las interfaces frente a futuras actualizaciones.
 
@@ -47,37 +47,49 @@ Una extensión para **Google Chrome** diseñada para auditar perfiles en tiempo 
 
 ---
 
-## Instalación y Despliegue (Local)
+## Guía de Instalación y Despliegue (Local)
 
-### 1. Levantar la API Central
+### Preparación
+1. Abrir un editor de código, como por ejemplo VS Code.
+2. Descargar este repositorio (o clonarlo con `git clone https://github.com/clauu-uni/x-bot-detector.git`).
+3. Abrir la carpeta del proyecto en el editor y abrir una terminal.
+
+### 1. API (Backend)
+En la terminal que acabas de abrir, instala las dependencias necesarias:
+
 ```bash
-# Clonar el repositorio
-git clone https://github.com/clauu-uni/x-bot-detector.git
-cd x-bot-detector
-
-# Crear entorno virtual e instalar dependencias
-python -m venv env
-source env/bin/activate  # En Windows: env\Scripts\activate
-pip install -r requirements_api.txt
-
-# Ejecutar el servidor (por defecto en http://localhost:8000)
-uvicorn api_main:app --reload
+pip install fastapi uvicorn pandas pydantic joblib pygam streamlit
 ```
 
-### 2. Levantar la Aplicación Web (B2B)
-```bash
-# En una nueva terminal, instalar dependencias del frontend
-pip install -r requirements_web.txt
+Asegúrate de que el archivo principal se llama `main.py` y contiene la carga del modelo (con `pickle` o `joblib`). Ejecuta el servidor con:
 
-# Ejecutar la aplicación de Streamlit
-streamlit run dashboard.py
+```bash
+uvicorn main:app --reload
 ```
 
-### 3. Instalar la Extensión de Chrome (B2C)
+*(Si te da error, prueba con: `py -m uvicorn main:app --reload`)*
+
+La API estará activa en `http://localhost:8000`. Puedes consultar la documentación interactiva en `http://localhost:8000/docs`.
+
+### 2. Aplicación Web (B2B)
+1. **No cierres la terminal de la API.**
+2. Abre una nueva terminal dentro de VS Code (haz clic en el icono `+` en el panel de terminal).
+3. Ejecuta la interfaz de Streamlit:
+
+```bash
+py -m streamlit run dashboard.py
+```
+
+El navegador se abrirá automáticamente en `http://localhost:8501`.
+
+### 3. Extensión de Chrome (B2C)
 1. Abre Google Chrome y ve a `chrome://extensions/`.
-2. Activa el **Modo de desarrollador** (arriba a la derecha).
+2. Activa el **Modo desarrollador** (interruptor arriba a la derecha).
 3. Haz clic en **Cargar descomprimida**.
-4. Selecciona la carpeta `extension_chrome` de este repositorio.
+4. Selecciona la carpeta `AutentiX_extension` que está dentro de la carpeta principal.
+5. La extensión aparecerá en tu barra de herramientas.
+
+> **Nota importante:** Para que el sistema completo funcione (Aplicación + Extensión), debes mantener la terminal de la API abierta mientras realizas las pruebas. Si cierras la API, el resto de componentes perderán la conexión.
 
 ---
 
