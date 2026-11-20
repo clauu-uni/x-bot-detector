@@ -1,0 +1,1104 @@
+---
+title: "AutentiX: Detección de actividad automatizada en X"
+author: "Danielle Saxon"
+date: "2026-06-14"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cargar paquetes y base de datos
+
+```{r setup, warning=FALSE message=FALSE}
+library(repmod) # Tablas de resultados de modelos
+library(performance) # Validación de modelos estadísticos
+library(mlbench)
+library(clickR)
+library(car)
+library(readr)
+library(DHARMa)
+library(readxl)
+library(ggplot2)      # Gráficos de alta calidad
+library(lme4)         # Ajuste de GLMMs
+library(mgcv)         # Ajuste de GAMs
+library(ggeffects)    # Gráficas de efectos
+library(gridExtra)
+library(dplyr)
+library(mgcViz)
+library(ggstats)
+library(lme4)        # Hacer modelos mixtos
+library(gamm4)       # Hacer modelos GAMM
+library(forcats)
+library(caret)
+library(glmnet)     #Hacer Elastic Net
+```
+
+```{r}
+datos_b2b <- read_csv("datos_b2b.csv")
+```
+
+Esta base de datos tiene 37.438 observaciones con respectivas características de cada cuenta que ayudan a distinguir si la cuenta es un bot o un humano.
+
+# Análisis descriptivo
+
+```{r}
+descriptive(datos_b2b)
+```
+
+## Proporción de bots en la base de datos
+
+```{r}
+# Asegurar que is_bot sea factor para las gráficas
+datos_b2b <- datos_b2b %>%
+  mutate(is_bot_factor = ifelse(is_bot == 1, "Bot", "Humano"))
+
+# Gráfico de proporción de la variable respuesta
+ggplot(datos_b2b, aes(x = is_bot_factor, fill = is_bot_factor)) +
+  geom_bar(width = 0.6, alpha = 0.85) +
+  geom_text(stat = "count", aes(label = after_stat(count)), 
+            vjust = -0.8, size = 5, fontface = "bold", color = "#2C3E50") +
+  scale_fill_manual(values = c("Bot" = "#F9C6D1", "Humano" = "#B2E2F2")) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  theme_minimal() +
+  labs(
+    title = "Composición del Dataset: Bots vs Humanos",
+    subtitle = "Volumen total de cuentas analizadas en el entorno B2B",
+    x = "Tipo de Cuenta",
+    y = "Número total de registros"
+  ) +
+  theme(legend.position = "none", plot.title = element_text(face = "bold", size = 14))
+
+# Cálculo exacto de proporciones
+prop.table(table(datos_b2b$is_bot))
+```
+
+## Proporción de bots por idioma
+
+```{r}
+
+analisis_idioma <- datos_b2b %>%
+  group_by(lang) %>%
+  summarise(
+    n_cuentas = n(),
+    prop_verificados = mean(verified == TRUE, na.rm = TRUE),
+    prop_bots = mean(is_bot == 1, na.rm = TRUE)
+  ) %>%
+  filter(n_cuentas > 15) %>% # Filtrar idiomas residuales para evitar sesgos visuales
+  arrange(desc(n_cuentas))
+
+
+ggplot(analisis_idioma, aes(x = reorder(lang, prop_bots), y = prop_bots)) +
+  
+  geom_segment(aes(xend = lang, y = 0, yend = prop_bots),
+               color = "#4FC3F7", linewidth = 1.2) +
+  
+  coord_flip() +
+  theme_minimal() +
+  
+  labs(
+    title = "Proporción de bots por idioma",
+    subtitle = "Variabilidad entre comunidades lingüísticas",
+    x = "Idioma",
+    y = "Proporción de bots"
+  ) +
+  
+  scale_y_continuous(labels = scales::percent) +
+  
+  theme(
+    plot.title = element_text(face = "bold", size = 13),
+    axis.text.y = element_text(size = 9)
+  )
+```
+
+Se observa que entre diferentes idiomas hay una gran diferencia en proporción de bots. Si se hubiese introducido una variable por cada idioma, habría que añadir muchas variables dummy y en turno, aumentar la complejidad.
+
+## Relaciones logarítmicas
+
+```{r}
+# FOLLOWERS - ORIGINAL
+p_orig1 <- ggplot(datos_b2b, aes(x = followers_count)) +
+  geom_density(color = "#D7263D", fill = "#F9C6D1", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Followers (Escala Original)",
+    x = "Conteo bruto",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# FOLLOWERS - LOG
+p_log1 <- ggplot(datos_b2b, aes(x = log1p(followers_count))) +
+  geom_density(color = "#2C7FB8", fill = "#B2E2F2", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Followers (Escala Logarítmica)",
+    x = "log1p(Followers)",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# FAVOURITES - ORIGINAL
+p_orig2 <- ggplot(datos_b2b, aes(x = favourites_count)) +
+  geom_density(color = "#D7263D", fill = "#F9C6D1", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Favourites (Escala Original)",
+    x = "Conteo bruto",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# FAVOURITES - LOG
+p_log2 <- ggplot(datos_b2b, aes(x = log1p(favourites_count))) +
+  geom_density(color = "#2C7FB8", fill = "#B2E2F2", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Favourites (Escala Logarítmica)",
+    x = "log1p(Favourites)",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# FOLLOWING - ORIGINAL
+p_orig3 <- ggplot(datos_b2b, aes(x = following_count)) +
+  geom_density(color = "#D7263D", fill = "#F9C6D1", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Following (Escala Original)",
+    x = "Conteo bruto",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# FOLLOWING - LOG
+p_log3 <- ggplot(datos_b2b, aes(x = log1p(following_count))) +
+  geom_density(color = "#2C7FB8", fill = "#B2E2F2", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Following (Escala Logarítmica)",
+    x = "log1p(Following)",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# Account ages - ORIGINAL
+p_orig4 <- ggplot(datos_b2b, aes(x = account_age_days)) +
+  geom_density(color = "#D7263D", fill = "#F9C6D1", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Account age (Escala Original)",
+    x = "Conteo bruto",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# Account ages - LOG
+p_log4 <- ggplot(datos_b2b, aes(x = log1p(account_age_days))) +
+  geom_density(color = "#2C7FB8", fill = "#B2E2F2", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Account age (Escala Logarítmica)",
+    x = "log1p(Account age)",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# AVERAGE TWEETS PER DAY - ORIGINAL
+p_orig5 <- ggplot(datos_b2b, aes(x = average_tweets_per_day)) +
+  geom_density(color = "#D7263D", fill = "#F9C6D1", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Average tweets per day (Escala Original)",
+    x = "Conteo bruto",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+
+# AVERAGE TWEETS PER DAY - LOG
+p_log5 <- ggplot(datos_b2b, aes(x = log1p(average_tweets_per_day))) +
+  geom_density(color = "#2C7FB8", fill = "#B2E2F2", alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Average tweets per day (Escala Logarítmica)",
+    x = "log1p(Average tweets per day)",
+    y = "Densidad"
+  ) +
+  theme(plot.title = element_text(size = 11, face = "bold"))
+```
+
+```{r}
+grid.arrange(p_orig1, p_log1, p_orig5, p_log5, ncol = 2)
+grid.arrange(p_orig3, p_log3, p_orig4, p_log4, ncol = 2)
+grid.arrange(p_orig5, p_log5, p_orig5, p_log5, ncol = 2)
+```
+
+A diferencia de una distribución normal, donde la probabilidad de encontrar valores extremos es prácticamente nula, en las redes sociales esta dispersión genera una varianza extremadamente elevada. Para mitigar esta inestabilidad e integrar estas métricas en los modelos, se aplicó una transformación logarítmica (log (1+𝑥)). Este mismo comportamiento y su correspondiente estabilización se reproducen de manera idéntica en las variables de seguidores (𝑓𝑜𝑙𝑙𝑜𝑤𝑒𝑟𝑠_𝑐𝑜𝑢𝑛𝑡), seguidos (𝑓𝑜𝑙𝑙𝑜𝑤𝑖𝑛𝑔_𝑐𝑜𝑢𝑛𝑡), favoritos (𝑓𝑎𝑣𝑜𝑢𝑟𝑖𝑡𝑒𝑠_𝑐𝑜𝑢𝑛𝑡), tuits totales (𝑠𝑡𝑎𝑡𝑢𝑠𝑒𝑠_𝑐𝑜𝑢𝑛𝑡) y promedio diario (𝑎𝑣𝑒𝑟𝑎𝑔𝑒_𝑡𝑤𝑒𝑒𝑡𝑠_𝑝𝑒𝑟_𝑑𝑎𝑦).
+
+## Relaciones no lineales
+
+```{r}
+rel1 <- datos_b2b %>%
+  mutate(x_log = log1p(followers_count),
+         bin = cut(x_log, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x_log),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "log(1 + followers_count)",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+
+
+rel2 <- datos_b2b %>%
+  mutate(x_log = log1p(following_count),
+         bin = cut(x_log, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x_log),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "log(1 + following_count)",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+
+
+rel3 <- datos_b2b %>%
+  mutate(x_log = log1p(favourites_count),
+         bin = cut(x_log, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x_log),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "log(1 + favourites_count)",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+
+
+rel4 <- datos_b2b %>%
+  mutate(x_log = log1p(average_tweets_per_day),
+         bin = cut(x_log, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x_log),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "log(1 + average_tweets_per_day)",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+
+
+rel5 <- datos_b2b %>%
+  mutate(x_log = log1p(account_age_days),
+         bin = cut(x_log, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x_log),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "log(1 + account_age_days)",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+
+
+
+rel6 <- datos_b2b %>%
+  mutate(x = ratio_following_followers,
+         bin = cut(x, breaks = 20)) %>%
+  group_by(bin) %>%
+  summarise(
+    x_mid = mean(x),
+    prop_bot = mean(is_bot == 1)
+  ) %>%
+  arrange(x_mid) %>%
+  ggplot(aes(x = x_mid, y = prop_bot)) +
+  geom_point(color = "#2C7FB8") +
+  geom_line(color = "#2C7FB8") +
+  theme_minimal() +
+  labs(
+    x = "ratio_following_followers",
+    y = "Proporción de bots"
+  ) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+```
+
+```{r}
+grid.arrange(rel1, rel2, rel3, rel4, ncol = 2)
+grid.arrange(rel5, rel6, ncol = 2)
+```
+
+El análisis visual reveló que las variables transformadas no mantenían una relación lineal con la probabilidad de ser un bot. Para sortear este obstáculo, se implementaron Modelos Aditivos Generalizados (GAM), incorporando funciones de suavizado (splines) capaces de ajustarse a estas curvaturas (implementados en el modelo 4 y 5).
+
+# Entrenamiento de los modelos
+
+Para poder ejecutar sin esperar horas, se deberían cargar los modelos que ya han sido ejecutados. (se encuentran en la misma carpeta que el archivo de R)
+
+```{r}
+modelo2 <- readRDS("modelo2.rds")
+modelo3 <- readRDS("modelo3.rds")
+modelo4 <- readRDS("modelo4.rds")
+modelo5 <- readRDS("modelo5b.rds")
+modelob2c <- readRDS("modelob2c.rds")
+
+```
+
+## Modelo 1: GLM
+
+El primer modelo actuó como base de referencia incorporando la totalidad de las variables numéricas en su escala original y las variables dicotómicas de control. El predictor lineal resultante arrojó coeficientes con magnitudes extremadamente reducidas para algunas métricas (𝑓𝑎𝑣𝑜𝑢𝑟𝑖𝑡𝑒𝑠_𝑐𝑜𝑢𝑛𝑡, 𝑓𝑜𝑙𝑙𝑜𝑤𝑒𝑟𝑠_𝑐𝑜𝑢𝑛𝑡, 𝑓𝑜𝑙𝑙𝑜𝑤𝑖𝑛𝑔_𝑐𝑜𝑢𝑛𝑡, 𝑎𝑐𝑐𝑜𝑢𝑛𝑡_𝑎𝑔𝑒_𝑑𝑎𝑦𝑠).
+
+```{r}
+modelo1 <- glm(is_bot ~ favourites_count + followers_count + following_count + average_tweets_per_day + account_age_days + 
+                 default_profile + default_profile_image + geo_enabled + verified + has_description + statuses_count + has_language, 
+                              data = datos_b2b, 
+                              family = binomial())
+```
+
+```{r, warning=FALSE}
+report(modelo1, digits = 10)
+```
+
+### Comprobación de las asunciones
+
+Al analizar el modelo, se detectaron dos problemas críticos. En primer lugar, el cálculo del Factor de Inflación de la Varianza (VIF) reveló un claro problema de multicolinealidad, superando el umbral crítico de 10 en varias métricas. Al detenernos a revisar los datos, observamos que esta correlación tenía sentido lógico: el hecho de tener un idioma detectado (ℎ𝑎𝑠_𝑙𝑎𝑛𝑔𝑢𝑎𝑔𝑒) está directamente ligado a tener una biografía escrita (ℎ𝑎𝑠_𝑑𝑒𝑠𝑐𝑟𝑖𝑝𝑡𝑖𝑜𝑛); de igual manera, el volumen total histórico de tuits (𝑠𝑡𝑎𝑡𝑢𝑠𝑒𝑠_𝑐𝑜𝑢𝑛𝑡) en paralelo al promedio de tuits diarios (𝑎𝑣𝑒𝑟𝑎𝑔𝑒_𝑡𝑤𝑒𝑒𝑡𝑠_𝑝𝑒𝑟_𝑑𝑎𝑦).
+
+```{r}
+vif(modelo1)
+```
+
+Al interpretar estas variables como parejas redundantes y eliminar una de cada par, el VIF se redujo por debajo de los umbrales de peligro, estabilizando el modelo de inmediato.
+
+```{r}
+modelo1b <- glm(is_bot ~ favourites_count + followers_count + following_count + average_tweets_per_day + account_age_days + 
+                 default_profile + default_profile_image + geo_enabled + verified + has_description, 
+                              data = datos_b2b, 
+                              family = binomial())
+```
+
+```{r}
+vif(modelo1b) 
+plot(modelo1b, which=1)
+plot(modelo1b, which=5)
+plot(modelo1b, which=4, las=1)
+```
+
+Se dedujo que la magnitud casi nula de los derivaba de la escala original de las variables (Ley de Potencias) como se preveía. Adicionalmente, el análisis de los residuos de Pearson confirmó que no se cumplía la asunción de linealidad: existían residuos excesivamente altos frente a varianzas esperadas muy bajas, evidenciando que una gran porción del comportamiento no estaba siendo explicada por el modelo. Para corregir este fallo en las iteraciones siguientes, se procedió a aplicar la transformación logarítmica en los siguentes modelos.
+
+## Modelo 2: Modelo penalizado (*elastic net*)
+
+### Determinación de las coeficientes
+
+Matriz de correlación
+
+```{r}
+X2 <- datos_b2b[, c(
+  "ratio_following_followers",
+  "average_tweets_per_day",
+  "account_age_days",
+  "default_profile",
+  "default_profile_image",
+  "geo_enabled",
+  "verified",
+  "has_description"
+)]
+
+X2$log1p_followers_count <- log1p(datos_b2b$followers_count)
+X2$log1p_following_count <- log1p(datos_b2b$following_count)
+X2$log1p_favourites_count <- log1p(datos_b2b$favourites_count)
+
+X2$default_profile_image_log1p_followers <-
+  datos_b2b$default_profile_image * datos_b2b$followers_count
+
+X2_mat <- as.matrix(X2)
+
+library(corrplot)
+
+corrplot(
+  cor(X2_mat, use = "complete.obs"),
+  type = "lower",
+  diag = FALSE
+)
+```
+
+```{r, eval=FALSE}
+cv2 <- replicate(50, cv.glmnet(X2_mat, y, family="binomial", alpha=0.4)$lambda.1se) #lo ideal es hacer más repeticiones pero por limites computacionales no lo hacemos 
+plot(density(cv2))
+
+d2 <- density(cv2)
+mode_estimate2 <- d3$x[which.max(d$y)]
+mode_estimate2 #0.01179055
+```
+
+```{r,  warning=FALSE, eval=FALSE}
+y <- datos_b2b$is_bot  #Variable respuesta
+modelo2 <- glmnet(X2_mat, y, family="binomial")
+```
+
+```{r}
+report(modelo2, s = 0.01179055)
+```
+
+### Asunciones
+
+Lo convertimos en un GLM normal para poder ver las asunciones
+
+```{r}
+modelo2b <- glm(is_bot ~ log1p(favourites_count) + log1p(followers_count) + log1p(following_count) + average_tweets_per_day + 
+                 default_profile + geo_enabled + verified + has_description + ratio_following_followers, 
+                              data = datos_b2b, 
+                              family = binomial())
+
+vif(modelo2b) 
+plot(modelo2b, which=1) #tenemos 3 outliers 
+plot(modelo2b, which=5)
+plot(modelo2b, which=4, las=1)
+```
+
+# MODELO 3: GLMM
+
+```{r, eval=FALSE}
+# para hacer un GLMM las variables tienen que ser factores  
+datos_b2b$fac_default_profile        <- factor(datos_b2b$default_profile)
+datos_b2b$fac_default_profile_image <- factor(datos_b2b$default_profile_image)
+datos_b2b$fac_geo_enabled            <- factor(datos_b2b$geo_enabled)
+datos_b2b$fac_verified               <- factor(datos_b2b$verified)
+datos_b2b$fac_has_description        <- factor(datos_b2b$has_description)
+
+modelo3 <- glmer(is_bot ~ 
+                   log1p(favourites_count) + 
+                   log1p(followers_count) + 
+                   log1p(following_count) + 
+                   ratio_following_followers + 
+                   average_tweets_per_day + 
+                   fac_default_profile + 
+                   fac_default_profile_image + 
+                   fac_geo_enabled + fac_verified + 
+                   fac_has_description +
+                   (1|lang),
+               data = datos_b2b, 
+               family = binomial())
+
+summary(modelo3)
+```
+
+```{r}
+summary(modelo3)
+```
+
+### Asunciones
+
+```{r}
+plot(modelo3, which=1) 
+
+
+residuos3 <- simulateResiduals(modelo3, n = 1000)
+
+plot(residuos3)
+```
+
+# MODELO 4: GAM
+
+```{r, eval=FALSE}
+modelo4 <- gam(is_bot ~ s(log1p(favourites_count)) + 
+                 s(log1p(followers_count)) + 
+                 s(log1p(following_count)) + 
+                 s(ratio_following_followers) + 
+                 s(log1p(average_tweets_per_day)) + 
+                 default_profile + 
+                 default_profile_image + 
+                 geo_enabled + 
+                 verified + 
+                 has_description + 
+                 s(log1p(account_age_days)), 
+                data = datos_b2b, 
+                family = binomial()
+          )
+
+```
+
+```{r}
+summary(modelo4)
+```
+
+```{r}
+plot(modelo4)
+```
+
+```{r}
+residuos4 <- simulateResiduals(
+  fittedModel = modelo4,
+  n = 1000
+)
+
+plot(residuos4)
+```
+
+# Modelo 5: GAMM
+
+```{r, eval=FALSE}
+table(datos_b2b$lang)
+
+
+#agrupoa todos los idiomas com menos que 20 obervaciones en other 
+datos_b2b$lang_grp <- fct_lump_min(
+  datos_b2b$lang,
+  min = 20
+)
+table(datos_b2b$lang_grp)
+```
+
+```{r, eval=FALSE}
+modelo5 <- gamm4(
+  is_bot ~ 
+    s(log1p(favourites_count), k = 10) +
+    s(log1p(followers_count), k = 10) +
+    s(log1p(following_count), k = 10) +
+    s(log1p(ratio_following_followers), k = 10) +
+    s(log1p(average_tweets_per_day), k = 10) +
+    default_profile +
+    default_profile_image +
+    geo_enabled +
+    verified +
+    has_description,
+    random = ~(1 | lang_grp),
+    data = datos_b2b,
+    family = binomial()
+    )
+
+```
+
+```{r}
+plot(modelo5$gam)
+```
+
+```{r}
+summary(modelo5$gam)
+summary(modelo5$mer)
+```
+
+```{r}
+residuos5 <- simulateResiduals(modelo5$mer)
+plot(residuos5)
+```
+
+# Métricas: AIC
+
+```{r}
+AIC(modelo1, modelo1b, modelo2b, modelo3, modelo4, modelo5$mer)
+```
+
+Función Bootstrap y holdout
+
+```{r}
+bootstrap_optimism_bss <- function(modelo, data, B = 100){
+  
+  formula_modelo <- formula(modelo)
+  y_name <- all.vars(formula_modelo)[1]
+  
+  optimismo <- numeric(B)
+  eps <- 1e-10   # para evitar divisiones por 0
+  
+  for (b in 1:B){
+    
+    indices <- sample(1:nrow(data), replace = TRUE)
+    datos_boot <- data[indices, ]
+    
+    # 🔥 reconstrucción del modelo según tipo
+    if (inherits(modelo, "gam")) {
+      
+      mod_boot <- mgcv::gam(formula_modelo,
+                           data = datos_boot,
+                           family = binomial())
+      
+      pred_boot <- predict(mod_boot, newdata = datos_boot, type="response")
+      pred_orig <- predict(mod_boot, newdata = data, type="response")
+      
+    } else if (inherits(modelo, "glmerMod")) {
+      
+      mod_boot <- update(modelo, data = datos_boot)
+      
+      # 👉 GLMM: usamos solo efectos fijos (más estable)
+      pred_boot <- predict(mod_boot, newdata = datos_boot, type="response", re.form = NA)
+      pred_orig <- predict(mod_boot, newdata = data, type="response", re.form = NA)
+      
+    } else {
+      
+      # GLM
+      mod_boot <- update(modelo, data = datos_boot)
+      
+      pred_boot <- predict(mod_boot, newdata = datos_boot, type="response")
+      pred_orig <- predict(mod_boot, newdata = data, type="response")
+    }
+    
+    # reales
+    real_boot <- datos_boot[[y_name]]
+    real_orig <- data[[y_name]]
+    
+    # BSS bootstrap
+    bs_boot <- mean((pred_boot - real_boot)^2)
+    prev_boot <- mean(real_boot)
+    den_boot <- max(prev_boot * (1 - prev_boot), eps)
+    BSS_boot <- 1 - (bs_boot / den_boot)
+    
+    # BSS original
+    bs_orig <- mean((pred_orig - real_orig)^2)
+    prev_orig <- mean(real_orig)
+    den_orig <- max(prev_orig * (1 - prev_orig), eps)
+    BSS_orig <- 1 - (bs_orig / den_orig)
+    
+    # optimismo
+    optimismo[b] <- BSS_boot - BSS_orig
+  }
+  
+  # modelo original
+  if (inherits(modelo, "glmerMod")) {
+    pred_app <- predict(modelo, newdata = data, type="response", re.form = NA)
+  } else {
+    pred_app <- predict(modelo, newdata = data, type="response")
+  }
+  
+  real_app <- data[[y_name]]
+  
+  bs_app <- mean((pred_app - real_app)^2)
+  prev_app <- mean(real_app)
+  den_app <- max(prev_app * (1 - prev_app), eps)
+  BSS_app <- 1 - (bs_app / den_app)
+  
+  # corrección
+  O <- mean(optimismo, na.rm = TRUE)
+  BSS_corrected <- BSS_app - O
+  
+  return(list(
+    BSS_apparent = BSS_app,
+    optimism = O,
+    BSS_corrected = BSS_corrected
+  ))
+}
+
+```
+
+```{r}
+holdout_bss_gamm <- function(modelo, data, train_prop = 0.8){
+  
+  set.seed(123)
+  
+  n <- nrow(data)
+  train_idx <- sample(1:n, size = floor(train_prop * n))
+  
+  train_data <- data[train_idx, ]
+  test_data  <- data[-train_idx, ]
+  
+  formula_modelo <- formula(modelo$gam)  # 👈 importante en GAMM
+  y_name <- all.vars(formula_modelo)[1]
+  
+  eps <- 1e-10
+  
+  # 🔥 reconstruir GAMM
+  mod <- gamm4::gamm4(formula_modelo,
+                      data = train_data,
+                      family = binomial())
+  
+  # ✅ predicción (parte GAM)
+  pred <- predict(mod$gam, newdata = test_data, type = "response")
+  
+  real <- test_data[[y_name]]
+  
+  # BSS
+  bs <- mean((pred - real)^2)
+  prev <- mean(real)
+  den <- max(prev * (1 - prev), eps)
+  
+  BSS <- 1 - (bs / den)
+  
+  return(BSS)
+}
+
+# sin haber entrenado el modelo previamente
+holdout_bss_gamm_fast <- function(formula_modelo, data, train_prop = 0.8){
+  
+  set.seed(123)
+  
+  n <- nrow(data)
+  train_idx <- sample(1:n, size = floor(train_prop * n))
+  
+  train_data <- data[train_idx, ]
+  test_data  <- data[-train_idx, ]
+  
+  y_name <- all.vars(formula_modelo)[1]
+  eps <- 1e-10
+  
+  # 🔥 solo entrena UNA vez aquí
+  mod <- gamm4::gamm4(formula_modelo,
+                      data = train_data,
+                      family = binomial())
+  
+  pred <- predict(mod$gam, newdata = test_data, type = "response")
+  real <- test_data[[y_name]]
+  
+  bs <- mean((pred - real)^2)
+  prev <- mean(real)
+  den <- max(prev * (1 - prev), eps)
+  
+  BSS <- 1 - (bs / den)
+  
+  return(BSS)
+}
+```
+
+# Métricas: BSS
+
+Se ha hecho el BSS con bootstrap en la mayoria de los modelos
+
+## Modelo 1
+
+```{r, eval=FALSE, warning=FALSE}
+
+BSS1 <- bootstrap_optimism_bss(modelo1, datos_b2b, B = 100)
+
+BSS1$BSS_apparent
+BSS1$optimism
+BSS1$BSS_corrected
+
+# [1] 0.290558
+# [1] 0.0002856526
+# [1] 0.2902723
+```
+
+```{r}
+BSS1 <- readRDS("BSS_bootstrap_1")
+BSS1
+```
+
+## Modelo 2
+
+```{r, eval=FALSE, warning=FALSE}
+BSS2 <- bootstrap_optimism_bss(modelo2, datos_b2b, B = 100)
+
+BSS2$BSS_apparent
+BSS2$optimism
+BSS2$BSS_corrected
+
+# [1] 0.3459578
+# [1] 0.00046692
+# [1] 0.3454909
+
+
+```
+
+```{r}
+BSS2 <- readRDS("BSS_bootstrap_3")
+BSS2
+```
+
+## Modelo 3
+
+```{r, eval=FALSE}
+BSS3 <- bootstrap_optimism_bss(modelo3, datos_b2b, B = 20)  
+BSS3$BSS_apparent 
+BSS3$optimism 
+BSS3$BSS_corrected
+
+# [1] 0.3466368
+# [1] 0.000389097
+# [1] 0.3462477
+```
+
+```{r}
+BSS3 <- readRDS("BSS_bootstrap_mixto")
+BSS3
+```
+
+## Modelo 4
+
+```{r, eval=FALSE}
+BSS4 <- bootstrap_optimism_bss(modelo4, datos_b2b, B = 40)
+
+BSS4$BSS_apparent
+BSS4$optimism
+BSS4$BSS_corrected
+
+# [1] 0.4525239
+# [1] 0.00304426
+# [1] 0.4494796
+```
+
+```{r}
+BSS4 <- readRDS("BSS_bootstrap_web")
+BSS4
+```
+
+## Modelo 5 (Holdout)
+
+```{r, eval=FALSE}
+BSS5 <- holdout_bss_gamm(modelo5, datos_b2b, 0.8)
+BSS5
+
+# 0.4533844
+
+BSS5 <- readRDS("BSS_holdout_5b")
+```
+
+```{r}
+BSS5 <- readRDS("BSS_holdout_5b")
+BSS5
+```
+
+# Métricas: AUC
+
+## Modelo 1
+
+```{r, eval=FALSE}
+AUC_modelo1boot <- boot_model(
+  formula(modelo1),
+  data = datos_b2b,
+  B = 100,
+  fit_function = "glm",
+  metric = "AUC"
+)
+AUC_modelo1boot
+
+#$apparent_fit
+#[1] 0.8140209
+
+#$optimism
+#[1] 0.0003003653
+```
+
+```{r}
+AUC_modelo1boot <- readRDS("AUC_bootstrap_1")
+
+AUC_modelo1boot
+```
+
+## Modelo 2
+
+```{r, eval=FALSE}
+
+AUC_modelo2bboot <- boot_model(
+  formula(modelo2b),
+  data = datos_b2b,
+  B = 100,
+  fit_function = "glm",
+  metric = "AUC"
+)
+AUC_modelo2bboot
+
+# $apparent_fit
+# [1] 0.8400733
+
+# $optimism
+# [1] 4.762571e-05
+
+
+```
+
+```{r, eval=FALSE}
+AUC_modelo2bboot <- readRDS("AUC_bootstrap_3")
+AUC_modelo2bboot
+```
+
+## Modelo 3
+
+```{r, eval=FALSE}
+(AUC_modelomixto <- AUC(predict(modelomixto), datos_b2b$is_bot))
+
+# [1] 0.8579389
+
+```
+
+```{r}
+AUC3 <- readRDS("AUC_mixto")
+AUC3
+```
+
+## Modelo 4
+
+```{r, eval=FALSE}
+AUC_4boot <- boot_model(
+  formula(modeloweb),
+  data = datos_b2b,
+  B = 30,
+  fit_function = "gam",
+  metric = "AUC", 
+  family = binomial()
+)
+
+AUC_4boot
+
+# $apparent_fit
+# [1] 0.8934884
+
+# $optimism
+# [1] 0.001444262
+
+
+```
+
+```{r}
+AUC_4boot <- readRDS("AUC_bootstrap_web")
+AUC_4boot
+```
+
+## Modelo 5
+
+```{r}
+(AUC_modelo5gam <- AUC(predict(modelo5$gam), datos_b2b$is_bot))
+(AUC_modelo5mer <- AUC(predict(modelo5$mer), datos_b2b$is_bot))
+
+# [1] 0.8896307
+# [1] 0.8953415
+```
+
+# **Matriz de confusión del modelo final**
+
+```{r}
+library(caret)
+
+pred <- predict(modelo4, type = "response")
+```
+
+```{r}
+threshold <- 0.5  
+
+pred_class <- ifelse(pred > threshold, 1, 0)
+
+
+cm <- confusionMatrix(
+  factor(pred_class),
+  factor(datos_b2b$is_bot),
+  positive = "1"
+)
+
+
+confusionMatrix(factor(pred_class), factor(datos_b2b$is_bot), positive = "1")
+
+cm_table <- table(Predicted = pred_class, Actual = datos_b2b$is_bot)
+cm_df <- as.data.frame(cm_table)
+
+ggplot(cm_df, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = Freq), size = 6) +
+  scale_fill_gradient(low = "#ffffff", high = "#68c5f7") +
+  labs(
+    title = "Matriz de confusión",
+    x = "Valor Real",
+    y = "Valor Predicho"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    text = element_text(size = 12)
+  )
+```
+
+Intentar con un valor diferente.
+
+```{r}
+threshold <- 0.54 
+
+pred_class3 <- ifelse(pred > threshold, 1, 0)
+
+
+cm <- confusionMatrix(
+  factor(pred_class3),
+  factor(datos_b2b$is_bot),
+  positive = "1"
+)
+
+
+confusionMatrix(factor(pred_class3), factor(datos_b2b$is_bot), positive = "1")
+
+cm_table3 <- table(Predicted = pred_class3, Actual = datos_b2b$is_bot)
+cm_df3 <- as.data.frame(cm_table3)
+
+ggplot(cm_df3, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = Freq), size = 6) +
+  scale_fill_gradient(low = "#ffffff", high = "#68c5f7") +
+  labs(
+    title = "Confusion Matrix",
+    x = "Actual",
+    y = "Predicted"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    text = element_text(size = 12)
+  )
+```
+
+# Modelo B2C
+
+Quitar la variable de favourites_count
+
+```{r, eval=FALSE}
+modelob2c <- gam(is_bot ~ s(log1p(followers_count)) + 
+                 s(log1p(following_count)) + 
+                 s(ratio_following_followers) + 
+                 s(log1p(average_tweets_per_day)) + 
+                 default_profile + 
+                 default_profile_image + 
+                 geo_enabled + 
+                 verified + 
+                 has_description + 
+                 s(log1p(account_age_days)), 
+                data = datos_b2b, 
+                family = binomial()
+          )
+
+
+```
+
+```{r}
+summary(modelob2c)
+AIC(modelob2c)
+```
+
+```{r}
+(AUC_modelob2c <- AUC(predict(modelob2c), datos_b2b$is_bot))
+
+```
