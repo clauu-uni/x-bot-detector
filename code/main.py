@@ -23,7 +23,7 @@ app.add_middleware(
 # 3. CARGAR LOS DOS MODELOS
 # Modelo 1: B2B
 try:
-    modelo_b2b = joblib.load("modelo_gam_autentix.pkl")
+    modelo_b2b = joblib.load("modelo_gam_b2b.pkl")
     MODELO_B2B_CARGADO = True
 except Exception as e:
         print(f"ERROR CARGANDO MODELO B2B: {e}")
