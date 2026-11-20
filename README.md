@@ -52,7 +52,7 @@ Una extensión para **Google Chrome** diseñada para auditar perfiles en tiempo 
 ### 1. Levantar la API Central
 ```bash
 # Clonar el repositorio
-git clone [https://github.com/tu-usuario/AutentiX.git](https://github.com/tu-usuario/AutentiX.git)
+git clone [https://github.com/clauu-uni/x-bot-detector](https://github.com/clauu-uni/x-bot-detector)
 cd AutentiX
 
 # Crear entorno virtual e instalar dependencias
