@@ -12,6 +12,8 @@ AutentiX es un sistema de auditoría de perfiles en la red social X (anteriormen
 
 El proyecto presenta una **arquitectura cliente-servidor basada en el desacoplamiento**, garantizando que el procesamiento analítico y matemático opere de forma centralizada y segura. Este diseño asegura una alta escalabilidad y facilita el mantenimiento técnico de las interfaces frente a futuras actualizaciones.
 
+Para consultar el análisis estadístico completo, la comparativa de modelos y las métricas de validación, puedes leer el [Informe Técnico Completo (PDF)](./docs/Informe_AutentiX.pdf).
+
 ---
 
 ## Arquitectura y Componentes
