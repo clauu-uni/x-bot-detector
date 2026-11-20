@@ -102,7 +102,7 @@ El navegador se abrirá automáticamente en `http://localhost:8501`.
 En la carpeta `/data` puedes encontrar el archivo CSV de prueba ya formateado y listo para ser cargado en el panel de Streamlit y probar el procesamiento masivo.
 
 ## Desarrollo de los Modelos Estadísticos
-En la carpeta `/modelación` puedes encontrar el documento de R junto a los archivos de modelos listos para usar con el fin de evitar un elevado tiempo de ejecución. Se detalla el proceso de modelación y razonamiento para cada modelo con las métricas de validación.
+En la carpeta `/docs/modeling` puedes encontrar el documento de R junto a los archivos de modelos listos para usar con el fin de evitar un elevado tiempo de ejecución. Se detalla el proceso de modelación y razonamiento para cada modelo con las métricas de validación.
 
 ---
 
