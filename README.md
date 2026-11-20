@@ -52,8 +52,8 @@ Una extensión para **Google Chrome** diseñada para auditar perfiles en tiempo 
 ### 1. Levantar la API Central
 ```bash
 # Clonar el repositorio
-git clone [https://github.com/clauu-uni/x-bot-detector](https://github.com/clauu-uni/x-bot-detector)
-cd AutentiX
+git clone https://github.com/clauu-uni/x-bot-detector.git
+cd x-bot-detector
 
 # Crear entorno virtual e instalar dependencias
 python -m venv env
