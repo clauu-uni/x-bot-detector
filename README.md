@@ -55,13 +55,14 @@ Una extensión para **Google Chrome** diseñada para auditar perfiles en tiempo 
 3. Abrir la carpeta del proyecto en el editor y abrir una terminal.
 
 ### 1. API (Backend)
-En la terminal que acabas de abrir, instala las dependencias necesarias:
+En la terminal que acabas de abrir, entra en la carpeta `code` e instala las dependencias necesarias:
 
 ```bash
+cd code
 pip install fastapi uvicorn pandas pydantic joblib pygam streamlit
 ```
 
-Asegúrate de que el archivo principal se llama `main.py` y contiene la carga del modelo (con `pickle` o `joblib`). Ejecuta el servidor con:
+Ejecuta el servidor de la API:
 
 ```bash
 uvicorn main:app --reload
@@ -74,9 +75,10 @@ La API estará activa en `http://localhost:8000`. Puedes consultar la documentac
 ### 2. Aplicación Web (B2B)
 1. **No cierres la terminal de la API.**
 2. Abre una nueva terminal dentro de VS Code (haz clic en el icono `+` en el panel de terminal).
-3. Ejecuta la interfaz de Streamlit:
+3. Entra en la carpeta `code` y ejecuta la interfaz de Streamlit:
 
 ```bash
+cd code
 py -m streamlit run dashboard.py
 ```
 
@@ -84,9 +86,9 @@ El navegador se abrirá automáticamente en `http://localhost:8501`.
 
 ### 3. Extensión de Chrome (B2C)
 1. Abre Google Chrome y ve a `chrome://extensions/`.
-2. Activa el **Modo desarrollador** (interruptor arriba a la derecha).
+2. Activa el **Modo de desarrollador** (interruptor arriba a la derecha).
 3. Haz clic en **Cargar descomprimida**.
-4. Selecciona la carpeta `AutentiX_extension` que está dentro de la carpeta principal.
+4. Selecciona la carpeta `AutentiX_Extension` que está dentro de la carpeta principal.
 5. La extensión aparecerá en tu barra de herramientas.
 
 > **Nota importante:** Para que el sistema completo funcione (Aplicación + Extensión), debes mantener la terminal de la API abierta mientras realizas las pruebas. Si cierras la API, el resto de componentes perderán la conexión.
@@ -94,7 +96,7 @@ El navegador se abrirá automáticamente en `http://localhost:8501`.
 ---
 
 ## Dataset de Prueba
-En la carpeta `/data` puedes encontrar un archivo de prueba llamado `dataset_auditoria_b2b.csv` ya formateado y listo para ser cargado en el panel de Streamlit y probar el procesamiento masivo.
+En la carpeta `/data` puedes encontrar el archivo CSV de prueba ya formateado y listo para ser cargado en el panel de Streamlit y probar el procesamiento masivo.
 
 ---
 
